@@ -1,5 +1,33 @@
+import { jsonrepair } from "jsonrepair";
+
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MODEL = process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash";
+
+export interface LlmOptions {
+  /** Force the model to emit syntactically valid JSON (response_format). */
+  json?: boolean;
+}
+
+/**
+ * Extract a JSON object from LLM output. Tolerates ```fences and stray text,
+ * and repairs common LLM mistakes (e.g. unescaped quotes inside strings).
+ */
+export function extractJson<T>(raw: string): T | null {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  const slice = raw.slice(start, end + 1);
+  try {
+    return JSON.parse(slice) as T;
+  } catch {
+    /* try repair below */
+  }
+  try {
+    return JSON.parse(jsonrepair(slice)) as T;
+  } catch {
+    return null;
+  }
+}
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -15,7 +43,10 @@ interface OpenRouterMessage {
   content: string | ContentPart[];
 }
 
-async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
+async function callOpenRouter(
+  messages: OpenRouterMessage[],
+  opts: LlmOptions = {}
+): Promise<string> {
   const res = await fetch(OPENROUTER_URL, {
     method: "POST",
     headers: {
@@ -27,6 +58,7 @@ async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
     body: JSON.stringify({
       model: MODEL,
       messages,
+      ...(opts.json ? { response_format: { type: "json_object" } } : {}),
     }),
   });
 
@@ -43,11 +75,15 @@ async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
 /**
  * Single-shot generation with an optional system prompt.
  */
-export async function generate(prompt: string, systemPrompt?: string): Promise<string> {
+export async function generate(
+  prompt: string,
+  systemPrompt?: string,
+  opts: LlmOptions = {}
+): Promise<string> {
   const messages: OpenRouterMessage[] = [];
   if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
   messages.push({ role: "user", content: prompt });
-  return callOpenRouter(messages);
+  return callOpenRouter(messages, opts);
 }
 
 /**
@@ -83,12 +119,13 @@ export async function generateWithPdf(
 export async function chat(
   systemPrompt: string,
   history: ChatMessage[],
-  userMessage: string
+  userMessage: string,
+  opts: LlmOptions = {}
 ): Promise<string> {
   const messages: OpenRouterMessage[] = [
     { role: "system", content: systemPrompt },
     ...history.map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: userMessage },
   ];
-  return callOpenRouter(messages);
+  return callOpenRouter(messages, opts);
 }

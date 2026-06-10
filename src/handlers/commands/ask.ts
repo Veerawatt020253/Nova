@@ -6,7 +6,7 @@ import {
   showTyping,
   stripMarkdown,
 } from "../../services/line.js";
-import { chat } from "../../services/llm.js";
+import { chat, extractJson } from "../../services/llm.js";
 import { buildAskSystemPrompt } from "../../prompts/ask.js";
 import {
   buildRichReplyFlex,
@@ -24,25 +24,23 @@ type ParsedReply =
   | { kind: "question"; text: string; options: string[] }
   | { kind: "update"; field: string; value: string; reply: string };
 
+interface AskEnvelope {
+  format?: string;
+  text?: string;
+  title?: string;
+  emoji?: string;
+  sections?: RichReply["sections"];
+  footer?: string;
+  options?: string[];
+  field?: string;
+  value?: string;
+  reply?: string;
+}
+
 /** Parse the JSON envelope from the LLM; fall back to plain text. */
 function parseReply(raw: string): ParsedReply {
-  try {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start === -1 || end <= start) throw new Error("no json");
-    const parsed = JSON.parse(raw.slice(start, end + 1)) as {
-      format?: string;
-      text?: string;
-      title?: string;
-      emoji?: string;
-      sections?: RichReply["sections"];
-      footer?: string;
-      options?: string[];
-      field?: string;
-      value?: string;
-      reply?: string;
-    };
-
+  const parsed = extractJson<AskEnvelope>(raw);
+  if (parsed) {
     if (parsed.format === "flex" && parsed.title && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
       return {
         kind: "flex",
@@ -78,10 +76,20 @@ function parseReply(raw: string): ParsedReply {
     if (parsed.format === "text" && parsed.text) {
       return { kind: "text", text: parsed.text };
     }
-    throw new Error("unrecognized envelope");
-  } catch {
-    return { kind: "text", text: stripMarkdown(raw) };
+    // Valid JSON but unknown shape — salvage any readable text field
+    const salvage = parsed.text || parsed.reply || parsed.title;
+    if (salvage) return { kind: "text", text: salvage };
   }
+
+  // Not JSON at all → treat as a plain-text answer. But never dump raw JSON
+  // syntax at the user if parsing failed on a JSON-looking blob.
+  if (raw.trimStart().startsWith("{")) {
+    return {
+      kind: "text",
+      text: "ขอโทษทีนะ ระบบสะดุดนิดหน่อย 😅 ถามใหม่อีกครั้งได้เลย",
+    };
+  }
+  return { kind: "text", text: stripMarkdown(raw) };
 }
 
 /** Free text / Q&A — answer with active-project context. */
@@ -114,7 +122,7 @@ export async function handleAsk(
 
   let reply: ParsedReply;
   try {
-    reply = parseReply(await chat(systemPrompt, state.history, text));
+    reply = parseReply(await chat(systemPrompt, state.history, text, { json: true }));
   } catch (err) {
     console.error("Q&A LLM call failed:", err);
     await replyText(replyToken, "❌ ตอบไม่ได้ตอนนี้ ลองอีกครั้งนะ");

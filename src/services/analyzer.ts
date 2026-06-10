@@ -1,5 +1,5 @@
 import type { Milestone, Project } from "@prisma/client";
-import { generate } from "./llm.js";
+import { extractJson, generate } from "./llm.js";
 import { searchSerper, type SerperResult } from "./search/serper.js";
 import { searchSemantic } from "./search/semantic.js";
 import { searchGithub } from "./search/github.js";
@@ -39,14 +39,11 @@ async function searchCommercial(project: Project, keywords: string): Promise<Ser
   return results.flat();
 }
 
-/** Parse the LLM's JSON output (tolerates ```json fences and stray text). */
+/** Parse the LLM's JSON output (tolerates fences, stray text, broken quotes). */
 export function parseAnalysis(raw: string): AnalysisResult | null {
   try {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start === -1 || end <= start) return null;
-    const parsed = JSON.parse(raw.slice(start, end + 1)) as AnalysisResult;
-    if (!parsed.overview || !Array.isArray(parsed.dimensions) || parsed.dimensions.length === 0) {
+    const parsed = extractJson<AnalysisResult>(raw);
+    if (!parsed || !parsed.overview || !Array.isArray(parsed.dimensions) || parsed.dimensions.length === 0) {
       return null;
     }
     // Normalize so the flex builder never sees bad data
@@ -88,6 +85,6 @@ export async function runAnalysis(
   ]);
 
   const prompt = buildAnalyzePrompt(project, milestones, serperResults, scholarResults, githubResults);
-  const raw = await generate(prompt);
+  const raw = await generate(prompt, undefined, { json: true });
   return { result: parseAnalysis(raw), raw };
 }

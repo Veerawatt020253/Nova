@@ -1,5 +1,5 @@
 import { prisma } from "../db/client.js";
-import { generate } from "./llm.js";
+import { extractJson, generate } from "./llm.js";
 import { lineClient } from "./line.js";
 
 export interface UserProfile {
@@ -56,13 +56,13 @@ ${current}
 กฎ: ตอบเป็น JSON เท่านั้น {"nickname":"...","mood":"...","facts":["..."],"preferences":["..."]}
 - facts ไม่เกิน 10 ข้อ ข้อละสั้นๆ — ถ้าเกินให้ตัดข้อที่สำคัญน้อยสุด
 - อย่าเก็บเนื้อหาโครงงาน (มีที่เก็บอยู่แล้ว) เก็บเฉพาะเรื่องของ "ตัวผู้ใช้"
-- ถ้าไม่มีอะไรใหม่ ตอบ JSON เดิม`
+- ถ้าไม่มีอะไรใหม่ ตอบ JSON เดิม`,
+        undefined,
+        { json: true }
       );
 
-      const start = raw.indexOf("{");
-      const end = raw.lastIndexOf("}");
-      if (start === -1 || end <= start) return;
-      const parsed = JSON.parse(raw.slice(start, end + 1)) as UserProfile;
+      const parsed = extractJson<UserProfile>(raw);
+      if (!parsed) return;
 
       // sanitize
       const clean: UserProfile = {

@@ -1,0 +1,29 @@
+{
+  "name": "innovation-bot",
+  "version": "1.0.0",
+  "description": "LINE Bot for managing innovation projects with novelty analysis",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^9.5.0",
+    "@prisma/client": "^6.5.0",
+    "fastify": "^5.2.0",
+    "prisma": "^6.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

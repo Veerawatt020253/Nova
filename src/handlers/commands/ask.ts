@@ -1,0 +1,158 @@
+import { prisma } from "../../db/client.js";
+import {
+  replyFlex,
+  replyText,
+  replyTextWithChoices,
+  stripMarkdown,
+} from "../../services/line.js";
+import { chat } from "../../services/llm.js";
+import { buildAskSystemPrompt } from "../../prompts/ask.js";
+import {
+  buildRichReplyFlex,
+  flattenRichReply,
+  type RichReply,
+} from "../../services/flex.js";
+import { appendHistory, saveSession, type SessionState } from "../../services/session.js";
+
+const UPDATABLE_FIELDS = ["name", "problem", "targetUser", "solution", "techStack"];
+
+type ParsedReply =
+  | { kind: "text"; text: string }
+  | { kind: "flex"; rich: RichReply }
+  | { kind: "question"; text: string; options: string[] }
+  | { kind: "update"; field: string; value: string; reply: string };
+
+/** Parse the JSON envelope from the LLM; fall back to plain text. */
+function parseReply(raw: string): ParsedReply {
+  try {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start === -1 || end <= start) throw new Error("no json");
+    const parsed = JSON.parse(raw.slice(start, end + 1)) as {
+      format?: string;
+      text?: string;
+      title?: string;
+      emoji?: string;
+      sections?: RichReply["sections"];
+      footer?: string;
+      options?: string[];
+      field?: string;
+      value?: string;
+      reply?: string;
+    };
+
+    if (parsed.format === "flex" && parsed.title && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
+      return {
+        kind: "flex",
+        rich: {
+          title: parsed.title,
+          emoji: parsed.emoji,
+          sections: parsed.sections,
+          footer: parsed.footer,
+        },
+      };
+    }
+    if (
+      parsed.format === "question" &&
+      parsed.text &&
+      Array.isArray(parsed.options) &&
+      parsed.options.filter(Boolean).length >= 2
+    ) {
+      return { kind: "question", text: parsed.text, options: parsed.options.filter(Boolean) };
+    }
+    if (
+      parsed.format === "update" &&
+      parsed.field &&
+      UPDATABLE_FIELDS.includes(parsed.field) &&
+      parsed.value
+    ) {
+      return {
+        kind: "update",
+        field: parsed.field,
+        value: parsed.value,
+        reply: parsed.reply ?? "ขอบันทึกข้อมูลนี้เข้าโปรเจกต์นะ",
+      };
+    }
+    if (parsed.format === "text" && parsed.text) {
+      return { kind: "text", text: parsed.text };
+    }
+    throw new Error("unrecognized envelope");
+  } catch {
+    return { kind: "text", text: stripMarkdown(raw) };
+  }
+}
+
+/** Free text / Q&A — answer with active-project context. */
+export async function handleAsk(
+  replyToken: string,
+  userId: string,
+  state: SessionState,
+  text: string
+): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      activeProject: {
+        include: { milestones: { orderBy: { createdAt: "desc" }, take: 5 } },
+      },
+    },
+  });
+  const project = user?.activeProject ?? null;
+  const milestones = project?.milestones ?? [];
+
+  const systemPrompt = buildAskSystemPrompt(project, milestones);
+
+  let reply: ParsedReply;
+  try {
+    reply = parseReply(await chat(systemPrompt, state.history, text));
+  } catch (err) {
+    console.error("Q&A LLM call failed:", err);
+    await replyText(replyToken, "❌ ตอบไม่ได้ตอนนี้ ลองอีกครั้งนะ");
+    return;
+  }
+
+  // History keeps a plain-text rendering either way, so follow-ups have context
+  const historyText =
+    reply.kind === "flex"
+      ? flattenRichReply(reply.rich)
+      : reply.kind === "question"
+        ? `${reply.text}\n(ตัวเลือก: ${reply.options.join(" / ")})`
+        : reply.kind === "update"
+          ? `${reply.reply}\n(เสนออัพเดท ${reply.field} เป็น: ${reply.value})`
+          : reply.text;
+  appendHistory(state, "user", text);
+  appendHistory(state, "assistant", historyText);
+
+  // Project-update suggestion needs a confirmation round-trip
+  if (reply.kind === "update" && project) {
+    state.state = "confirming_update";
+    state.pendingField = reply.field;
+    state.pendingValue = reply.value;
+    await saveSession(userId, state);
+    await replyTextWithChoices(
+      replyToken,
+      `${stripMarkdown(reply.reply)}\n\n📝 จะอัพเดทเป็น:\n"${reply.value}"`,
+      ["บันทึกเลย ✅", "ไม่ต้องบันทึก"]
+    );
+    return;
+  }
+
+  await saveSession(userId, state);
+
+  try {
+    if (reply.kind === "flex") {
+      await replyFlex(replyToken, reply.rich.title.slice(0, 200), buildRichReplyFlex(reply.rich));
+    } else if (reply.kind === "question") {
+      await replyTextWithChoices(replyToken, stripMarkdown(reply.text), reply.options);
+    } else if (reply.kind === "update") {
+      // No active project to update — just answer with the reply text
+      await replyText(replyToken, stripMarkdown(reply.reply));
+    } else {
+      await replyText(replyToken, stripMarkdown(reply.text));
+    }
+  } catch (err) {
+    // Malformed flex/quick-reply (bad LLM structure) — degrade to plain text
+    console.error("Rich reply failed, falling back to text:", err);
+    await replyText(replyToken, historyText).catch(() => {});
+  }
+}

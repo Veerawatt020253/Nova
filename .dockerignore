@@ -1,0 +1,13 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.log
+.git
+.gitignore
+.claude
+docker-compose.yml
+scripts/smoke-test.ts
+scripts/test-flex.ts
+README.md

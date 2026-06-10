@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id // LINE userId
+  activeProjectId String?
+  activeProject   Project?  @relation("ActiveProject", fields: [activeProjectId], references: [id])
+  projects        Project[] @relation("UserProjects")
+  sessions        Session[]
+  createdAt       DateTime  @default(now())
+}
+
+model Project {
+  id             String @id @default(cuid())
+  userId         String
+  user           User   @relation("UserProjects", fields: [userId], references: [id])
+  activeForUsers User[] @relation("ActiveProject")
+
+  // Core fields
+  name               String
+  problem            String // What problem does this solve?
+  targetUser         String // Who is the target user?
+  solution           String // How does the solution work?
+  techStack          String // Tech stack description
+  competitionTarget  String? // NSC / depa / TICTA / other
+  submissionDeadline DateTime?
+
+  // Analysis cache
+  lastAnalysis   String? // JSON string of last /analyze result
+  lastAnalyzedAt DateTime?
+
+  // Latest uploaded document (PDF) — extracted content used as context
+  documentName    String?
+  documentContext String?
+
+  // Tracking
+  phase      Phase       @default(IDEATION)
+  milestones Milestone[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  description String
+  createdAt   DateTime @default(now())
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  // Conversation state + history for multi-turn flows (last 10 messages)
+  history   Json     @default("[]")
+  updatedAt DateTime @updatedAt
+}
+
+enum Phase {
+  IDEATION
+  PROTOTYPE
+  VALIDATION
+  SUBMISSION
+  COMPLETED
+}

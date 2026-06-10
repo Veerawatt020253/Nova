@@ -1,7 +1,7 @@
-import type { MessageEvent, PostbackEvent, TextEventMessage } from "@line/bot-sdk";
+import type { FollowEvent, MessageEvent, PostbackEvent, TextEventMessage } from "@line/bot-sdk";
 import { prisma } from "../db/client.js";
 import { clearFlow, loadSession, saveSession } from "../services/session.js";
-import { replyText, replyTextWithChoices } from "../services/line.js";
+import { lineClient, replyTextWithChoices, replyText } from "../services/line.js";
 import { handleNew, handleWizardInput } from "./commands/new.js";
 import { handleSwitch, handleSwitchPostback } from "./commands/switch.js";
 import { handleAnalyze } from "./commands/analyze.js";
@@ -81,6 +81,35 @@ export async function handleTextMessage(event: MessageEvent): Promise<void> {
 
   // ---- Default: Q&A ----
   return handleAsk(replyToken, userId, state, text);
+}
+
+/** New friend! Greet them like a person, not a manual. */
+export async function handleFollow(event: FollowEvent): Promise<void> {
+  const userId = event.source.userId;
+  if (!userId) return;
+
+  let name = "";
+  try {
+    const p = await lineClient.getProfile(userId);
+    name = p.displayName ?? "";
+    await prisma.user.upsert({
+      where: { id: userId },
+      update: { displayName: name || undefined },
+      create: { id: userId, displayName: name || undefined },
+    });
+  } catch {
+    await prisma.user.upsert({ where: { id: userId }, update: {}, create: { id: userId } });
+  }
+
+  await replyTextWithChoices(
+    event.replyToken,
+    `สวัสดี${name ? ` ${name}` : ""} พี่โนวาเอง 👋
+
+พี่เป็น mentor โครงงานนวัตกรรม — ช่วยคิด วิเคราะห์จุดแข็งจุดอ่อนแบบกรรมการจริง (ไม่อวยนะ บอกก่อน 😄) เตือน deadline และอยู่เป็นเพื่อนคุยตลอดทางจนถึงวันส่ง
+
+เริ่มจากเล่าโครงงานให้พี่ฟังหน่อย — กด /new ได้เลย หรือถ้ามีไฟล์ proposal อยู่แล้ว ส่ง PDF มาให้พี่อ่านก่อนก็ได้ 📄`,
+    ["/new", "/help"]
+  );
 }
 
 export async function handlePostback(event: PostbackEvent): Promise<void> {

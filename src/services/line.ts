@@ -85,6 +85,35 @@ export async function replyFlex(
   });
 }
 
+export async function pushTextWithChoices(
+  userId: string,
+  text: string,
+  options: string[]
+): Promise<void> {
+  const items = options
+    .filter(Boolean)
+    .slice(0, 13)
+    .map((opt) => ({
+      type: "action" as const,
+      action: {
+        type: "message" as const,
+        label: opt.length > 20 ? opt.slice(0, 19) + "…" : opt,
+        text: opt.slice(0, 300),
+      },
+    }));
+
+  await lineClient.pushMessage({
+    to: userId,
+    messages: [
+      {
+        type: "text",
+        text: text.slice(0, MAX_TEXT_LENGTH),
+        quickReply: items.length > 0 ? { items } : undefined,
+      },
+    ],
+  });
+}
+
 export async function pushFlex(
   userId: string,
   altText: string,

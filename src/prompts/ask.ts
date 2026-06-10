@@ -29,7 +29,8 @@ function summarizeAnalysis(lastAnalysis: string | null): string {
 
 export function buildAskSystemPrompt(
   project: Project | null,
-  milestones: Milestone[]
+  milestones: Milestone[],
+  userProfileBlock?: string
 ): string {
   const projectBlock = project
     ? JSON.stringify(
@@ -56,6 +57,9 @@ export function buildAskSystemPrompt(
       : "(none)";
 
   return `${ADVISOR_TONE}
+
+USER PROFILE (สิ่งที่พี่โนวาจำได้เกี่ยวกับผู้ใช้คนนี้จากการคุยกันก่อนหน้า):
+${userProfileBlock ?? "(ยังไม่รู้จักผู้ใช้คนนี้มากนัก)"}
 
 You know the user's current project in detail. Reference the project details when relevant.
 

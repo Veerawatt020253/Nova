@@ -13,6 +13,7 @@ import {
   type RichReply,
 } from "../../services/flex.js";
 import { appendHistory, saveSession, type SessionState } from "../../services/session.js";
+import { ensureDisplayName, profileBlock, updateUserProfile } from "../../services/profile.js";
 
 const UPDATABLE_FIELDS = ["name", "problem", "targetUser", "solution", "techStack"];
 
@@ -100,7 +101,13 @@ export async function handleAsk(
   const project = user?.activeProject ?? null;
   const milestones = project?.milestones ?? [];
 
-  const systemPrompt = buildAskSystemPrompt(project, milestones);
+  // Personalization: cache LINE display name + inject learned profile
+  ensureDisplayName(userId, user?.displayName);
+  const systemPrompt = buildAskSystemPrompt(
+    project,
+    milestones,
+    profileBlock(user?.displayName, user?.profile)
+  );
 
   let reply: ParsedReply;
   try {
@@ -122,6 +129,9 @@ export async function handleAsk(
           : reply.text;
   appendHistory(state, "user", text);
   appendHistory(state, "assistant", historyText);
+
+  // Learn about the user from this exchange (background, never blocks)
+  updateUserProfile(userId, text, historyText);
 
   // Project-update suggestion needs a confirmation round-trip
   if (reply.kind === "update" && project) {

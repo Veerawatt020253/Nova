@@ -13,6 +13,9 @@ model User {
   activeProject   Project?  @relation("ActiveProject", fields: [activeProjectId], references: [id])
   projects        Project[] @relation("UserProjects")
   sessions        Session[]
+  // Personalization
+  displayName     String? // LINE profile display name
+  profile         String? // JSON: durable facts learned from conversations
   createdAt       DateTime  @default(now())
 }
 
@@ -40,8 +43,9 @@ model Project {
   documentContext String?
 
   // Tracking
-  phase      Phase       @default(IDEATION)
-  milestones Milestone[]
+  phase          Phase       @default(IDEATION)
+  lastReminderAt DateTime? // last proactive deadline reminder
+  milestones     Milestone[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 }

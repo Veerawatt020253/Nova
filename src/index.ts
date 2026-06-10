@@ -1,8 +1,9 @@
 import Fastify from "fastify";
 import { validateSignature, type WebhookEvent } from "@line/bot-sdk";
 import { lineConfig } from "./services/line.js";
-import { handlePostback, handleTextMessage } from "./handlers/message.js";
+import { handleFollow, handlePostback, handleTextMessage } from "./handlers/message.js";
 import { handleFileMessage } from "./handlers/commands/document.js";
+import { startReminderScheduler } from "./services/reminders.js";
 
 const app = Fastify({ logger: true });
 
@@ -34,6 +35,8 @@ app.post("/webhook", async (req, reply) => {
         await handleFileMessage(event);
       } else if (event.type === "postback") {
         await handlePostback(event);
+      } else if (event.type === "follow") {
+        await handleFollow(event);
       }
     } catch (err) {
       req.log.error({ err, eventType: event.type }, "event handler failed");
@@ -46,7 +49,10 @@ app.post("/webhook", async (req, reply) => {
 const port = Number(process.env.PORT ?? 3000);
 app
   .listen({ port, host: "0.0.0.0" })
-  .then(() => console.log(`innovation-bot listening on :${port}`))
+  .then(() => {
+    console.log(`innovation-bot listening on :${port}`);
+    startReminderScheduler();
+  })
   .catch((err) => {
     console.error(err);
     process.exit(1);

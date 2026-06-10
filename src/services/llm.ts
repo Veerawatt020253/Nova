@@ -14,9 +14,11 @@ export interface LlmOptions {
  */
 export function extractJson<T>(raw: string): T | null {
   const start = raw.indexOf("{");
+  if (start === -1) return null;
   const end = raw.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-  const slice = raw.slice(start, end + 1);
+  // If the response was truncated (no closing brace), take everything from the
+  // first "{" onward and let jsonrepair close the open string/braces.
+  const slice = end > start ? raw.slice(start, end + 1) : raw.slice(start);
   try {
     return JSON.parse(slice) as T;
   } catch {
@@ -58,6 +60,9 @@ async function callOpenRouter(
     body: JSON.stringify({
       model: MODEL,
       messages,
+      // Generous cap: a LINE message maxes at 5000 chars (~2500 Thai tokens),
+      // so 4000 leaves headroom while preventing runaway/truncated replies.
+      max_tokens: 4000,
       ...(opts.json ? { response_format: { type: "json_object" } } : {}),
     }),
   });
@@ -67,9 +72,13 @@ async function callOpenRouter(
   }
 
   const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
   };
-  return data.choices?.[0]?.message?.content ?? "";
+  const choice = data.choices?.[0];
+  if (choice?.finish_reason === "length") {
+    console.warn("OpenRouter response truncated (finish_reason=length) — jsonrepair will salvage it");
+  }
+  return choice?.message?.content ?? "";
 }
 
 /**

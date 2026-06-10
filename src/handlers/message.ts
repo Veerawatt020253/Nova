@@ -39,6 +39,11 @@ export async function handleTextMessage(event: MessageEvent): Promise<void> {
     if (!isCommand) return handleEditInput(replyToken, userId, state, text);
     clearFlow(state);
     await saveSession(userId, state);
+  } else if (state.state === "awaiting_milestone") {
+    clearFlow(state);
+    await saveSession(userId, state);
+    if (!isCommand) return handleUpdate(replyToken, userId, text);
+    // command typed: fall through to routing below
   } else if (state.state === "confirming_update") {
     const pendingField = state.pendingField;
     const pendingValue = state.pendingValue;
@@ -71,8 +76,16 @@ export async function handleTextMessage(event: MessageEvent): Promise<void> {
   if (text.startsWith("/switch")) return handleSwitch(replyToken, userId);
   if (text.startsWith("/edit")) return handleEdit(replyToken, userId, state);
   if (text.startsWith("/analyze")) return handleAnalyze(replyToken, userId);
-  if (text.startsWith("/update"))
-    return handleUpdate(replyToken, userId, text.replace("/update", "").trim());
+  if (text.startsWith("/update")) {
+    const milestoneText = text.replace("/update", "").trim();
+    if (!milestoneText) {
+      // rich menu button: ask for the milestone, next message is the answer
+      state.state = "awaiting_milestone";
+      await saveSession(userId, state);
+      return replyText(replyToken, "เล่ามาเลยว่าทำอะไรเสร็จ เดี๋ยวพี่บันทึกให้ ✍️");
+    }
+    return handleUpdate(replyToken, userId, milestoneText);
+  }
   if (text.startsWith("/status")) return handleStatus(replyToken, userId);
   if (text.startsWith("/help") || text === "/") return replyText(replyToken, HELP_TEXT);
   if (text.startsWith("/ask"))

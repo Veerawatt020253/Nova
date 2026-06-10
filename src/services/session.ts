@@ -21,7 +21,7 @@ export type WizardStep =
   | "deadline";
 
 export interface SessionState {
-  state: "idle" | "creating_project" | "editing_project" | "confirming_update";
+  state: "idle" | "creating_project" | "editing_project" | "confirming_update" | "awaiting_milestone";
   step?: WizardStep;
   draft?: Partial<ProjectDraft>;
   // /edit wizard

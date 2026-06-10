@@ -1,5 +1,5 @@
 import { prisma } from "../../db/client.js";
-import { replyText, replyTextWithChoices, stripMarkdown } from "../../services/line.js";
+import { replyText, replyTextWithChoices, showTyping, stripMarkdown } from "../../services/line.js";
 import { generate } from "../../services/llm.js";
 
 const THAI_MONTHS = [
@@ -40,6 +40,8 @@ export async function handleUpdate(
     );
     return;
   }
+
+  showTyping(userId, 10);
 
   const milestone = await prisma.milestone.create({
     data: { projectId: project.id, description: text },

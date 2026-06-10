@@ -132,6 +132,16 @@ export async function pushFlex(
 }
 
 /**
+ * Show the typing indicator in the chat while we think (max 60s, auto-clears
+ * when the next message arrives). Never throws — purely cosmetic.
+ */
+export function showTyping(userId: string, seconds = 30): void {
+  void lineClient
+    .showLoadingAnimation({ chatId: userId, loadingSeconds: Math.min(60, Math.ceil(seconds / 5) * 5) })
+    .catch(() => {});
+}
+
+/**
  * Download message content (e.g. an uploaded PDF) from the LINE data API.
  */
 export async function downloadContent(messageId: string): Promise<Buffer> {

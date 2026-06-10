@@ -1,5 +1,5 @@
 import { prisma } from "../../db/client.js";
-import { pushFlex, pushText, replyText, stripMarkdown } from "../../services/line.js";
+import { pushFlex, pushText, replyText, showTyping, stripMarkdown } from "../../services/line.js";
 import { runAnalysis } from "../../services/analyzer.js";
 import { buildAnalysisFlex } from "../../services/flex.js";
 
@@ -31,6 +31,7 @@ export async function handleAnalyze(replyToken: string, userId: string): Promise
   // Fire-and-forget: don't block the webhook response
   void (async () => {
     try {
+      showTyping(userId, 60);
       const { result, raw } = await runAnalysis(project, project.milestones);
 
       await prisma.project.update({

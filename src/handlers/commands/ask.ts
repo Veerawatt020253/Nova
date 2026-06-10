@@ -3,6 +3,7 @@ import {
   replyFlex,
   replyText,
   replyTextWithChoices,
+  showTyping,
   stripMarkdown,
 } from "../../services/line.js";
 import { chat } from "../../services/llm.js";
@@ -108,6 +109,8 @@ export async function handleAsk(
     milestones,
     profileBlock(user?.displayName, user?.profile)
   );
+
+  showTyping(userId);
 
   let reply: ParsedReply;
   try {

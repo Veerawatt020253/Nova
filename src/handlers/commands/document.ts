@@ -1,6 +1,6 @@
 import type { FileEventMessage, MessageEvent } from "@line/bot-sdk";
 import { prisma } from "../../db/client.js";
-import { downloadContent, pushText, replyText, stripMarkdown } from "../../services/line.js";
+import { downloadContent, pushText, replyText, showTyping, stripMarkdown } from "../../services/line.js";
 import { generateWithPdf } from "../../services/llm.js";
 import { appendHistory, loadSession, saveSession } from "../../services/session.js";
 
@@ -37,6 +37,7 @@ export async function handleFileMessage(event: MessageEvent): Promise<void> {
   // Fire-and-forget: download + LLM read can take longer than the webhook window
   void (async () => {
     try {
+      showTyping(userId, 60);
       const pdf = await downloadContent(message.id);
       const summary = stripMarkdown(await generateWithPdf(EXTRACT_PROMPT, pdf, fileName));
 

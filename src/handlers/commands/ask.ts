@@ -41,14 +41,24 @@ interface AskEnvelope {
 function parseReply(raw: string): ParsedReply {
   const parsed = extractJson<AskEnvelope>(raw);
   if (parsed) {
+    // The LLM sneaks markdown/html into any string — clean everything once here
+    const clean = (s: string | undefined) => (s ? stripMarkdown(s) : undefined);
+
     if (parsed.format === "flex" && parsed.title && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
       return {
         kind: "flex",
         rich: {
-          title: parsed.title,
+          title: stripMarkdown(parsed.title),
           emoji: parsed.emoji,
-          sections: parsed.sections,
-          footer: parsed.footer,
+          sections: parsed.sections.map((s) => ({
+            heading: clean(s.heading),
+            text: clean(s.text),
+            bullets: Array.isArray(s.bullets)
+              ? s.bullets.filter(Boolean).map((b) => stripMarkdown(b))
+              : [],
+            numbered: s.numbered,
+          })),
+          footer: clean(parsed.footer),
         },
       };
     }
@@ -58,7 +68,11 @@ function parseReply(raw: string): ParsedReply {
       Array.isArray(parsed.options) &&
       parsed.options.filter(Boolean).length >= 2
     ) {
-      return { kind: "question", text: parsed.text, options: parsed.options.filter(Boolean) };
+      return {
+        kind: "question",
+        text: stripMarkdown(parsed.text),
+        options: parsed.options.filter(Boolean).map((o) => stripMarkdown(o)),
+      };
     }
     if (
       parsed.format === "update" &&
@@ -69,16 +83,16 @@ function parseReply(raw: string): ParsedReply {
       return {
         kind: "update",
         field: parsed.field,
-        value: parsed.value,
-        reply: parsed.reply ?? "ขอบันทึกข้อมูลนี้เข้าโปรเจกต์นะ",
+        value: stripMarkdown(parsed.value),
+        reply: clean(parsed.reply) ?? "ขอบันทึกข้อมูลนี้เข้าโปรเจกต์นะ",
       };
     }
     if (parsed.format === "text" && parsed.text) {
-      return { kind: "text", text: parsed.text };
+      return { kind: "text", text: stripMarkdown(parsed.text) };
     }
     // Valid JSON but unknown shape — salvage any readable text field
     const salvage = parsed.text || parsed.reply || parsed.title;
-    if (salvage) return { kind: "text", text: salvage };
+    if (salvage) return { kind: "text", text: stripMarkdown(salvage) };
   }
 
   // Not JSON at all → treat as a plain-text answer. But never dump raw JSON

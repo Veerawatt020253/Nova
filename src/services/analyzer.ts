@@ -1,5 +1,6 @@
 import type { Milestone, Project } from "@prisma/client";
 import { extractJson, generate } from "./llm.js";
+import { stripMarkdown } from "./line.js";
 import { searchSerper, type SerperResult } from "./search/serper.js";
 import { searchSemantic } from "./search/semantic.js";
 import { searchGithub } from "./search/github.js";
@@ -46,21 +47,23 @@ export function parseAnalysis(raw: string): AnalysisResult | null {
     if (!parsed || !parsed.overview || !Array.isArray(parsed.dimensions) || parsed.dimensions.length === 0) {
       return null;
     }
-    // Normalize so the flex builder never sees bad data
+    // Normalize so the flex builder never sees bad data (incl. markdown/html)
+    const clean = (s: string) => stripMarkdown(s);
+    parsed.overview = clean(parsed.overview ?? "");
     parsed.dimensions = parsed.dimensions.map((d) => ({
       name: d.name ?? "",
       emoji: d.emoji ?? "📌",
       score: Math.max(0, Math.min(10, Math.round(Number(d.score) || 0))),
-      comment: d.comment ?? "",
-      points: Array.isArray(d.points) ? d.points.filter(Boolean) : [],
+      comment: clean(d.comment ?? ""),
+      points: Array.isArray(d.points) ? d.points.filter(Boolean).map(clean) : [],
     }));
-    parsed.redFlags = Array.isArray(parsed.redFlags) ? parsed.redFlags.filter(Boolean) : [];
-    parsed.goodPoints = Array.isArray(parsed.goodPoints) ? parsed.goodPoints.filter(Boolean) : [];
-    parsed.nextSteps = Array.isArray(parsed.nextSteps) ? parsed.nextSteps.filter(Boolean) : [];
+    parsed.redFlags = Array.isArray(parsed.redFlags) ? parsed.redFlags.filter(Boolean).map(clean) : [];
+    parsed.goodPoints = Array.isArray(parsed.goodPoints) ? parsed.goodPoints.filter(Boolean).map(clean) : [];
+    parsed.nextSteps = Array.isArray(parsed.nextSteps) ? parsed.nextSteps.filter(Boolean).map(clean) : [];
     parsed.verdict = (["ผ่าน", "ผ่านแบบมีเงื่อนไข", "ไม่ผ่าน"] as const).includes(parsed.verdict)
       ? parsed.verdict
       : "ผ่านแบบมีเงื่อนไข";
-    parsed.verdictReason = parsed.verdictReason ?? "";
+    parsed.verdictReason = clean(parsed.verdictReason ?? "");
     return parsed;
   } catch {
     return null;

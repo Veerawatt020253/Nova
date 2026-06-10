@@ -155,11 +155,15 @@ export async function downloadContent(messageId: string): Promise<Buffer> {
 }
 
 /**
- * LINE chat cannot render markdown — strip whatever formatting the LLM
- * sneaks in so text messages stay clean.
+ * LINE chat cannot render markdown OR html — strip whatever formatting the
+ * LLM sneaks in (`**bold**`, `<b>bold</b>`, …) so messages stay clean.
  */
 export function stripMarkdown(text: string): string {
   return text
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<li(\s[^<>]*)?>/gi, "• ")
+    .replace(/<\/?(b|strong|i|em|u|s|strike|p|div|span|ul|ol|li|h[1-6]|code|pre|a)(\s[^<>]*)?\/?>/gi, "")
     .replace(/^```[^\n]*$/gm, "")
     .replace(/^#{1,6}\s*/gm, "")
     .replace(/\*\*(.+?)\*\*/g, "$1")

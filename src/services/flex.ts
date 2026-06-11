@@ -1,5 +1,6 @@
 import type { Milestone, Project } from "@prisma/client";
 import type { AnalysisResult } from "../prompts/analyze.js";
+import type { ProjectIdea } from "../prompts/features.js";
 
 // LINE Flex requires hex colors
 const C = {
@@ -310,6 +311,173 @@ export function flattenRichReply(r: RichReply): string {
   }
   if (r.footer) parts.push(r.footer);
   return parts.join("\n");
+}
+
+// ---------- Score reports (/validate, /startup, /predict) ----------
+
+function pctColor(pct: number): string {
+  return pct >= 70 ? C.green : pct >= 40 ? C.amber : C.red;
+}
+
+/** Horizontal percent bar (0-100). */
+function percentBar(pct: number) {
+  const width = Math.max(2, Math.min(100, pct));
+  return {
+    type: "box",
+    layout: "vertical",
+    height: "6px",
+    backgroundColor: C.barBg,
+    cornerRadius: "3px",
+    margin: "sm",
+    contents: [
+      {
+        type: "box",
+        layout: "vertical",
+        width: `${width}%`,
+        height: "6px",
+        backgroundColor: pctColor(pct),
+        cornerRadius: "3px",
+        contents: [{ type: "filler" }],
+      },
+    ],
+  };
+}
+
+function percentRow(label: string, pct: number) {
+  return {
+    type: "box",
+    layout: "vertical",
+    margin: "lg",
+    contents: [
+      {
+        type: "box",
+        layout: "horizontal",
+        contents: [
+          text(label, { size: "sm", color: C.text, flex: 1 }),
+          text(`${pct}%`, { size: "sm", weight: "bold", color: pctColor(pct), align: "end", flex: 0 }),
+        ],
+      },
+      percentBar(pct),
+    ],
+  };
+}
+
+export interface ScoreReport {
+  kicker: string; // small label above the title, e.g. "Problem Validation"
+  title: string;
+  emoji?: string;
+  /** Big headline number, e.g. Startup Potential 0-100. */
+  overall?: { label: string; pct: number };
+  scores: Array<{ label: string; pct: number }>;
+  sections: RichReplySection[];
+  footer?: string;
+}
+
+/** Score report → single Flex bubble (percent bars + detail sections). */
+export function buildScoreReportFlex(r: ScoreReport): object {
+  const contents: object[] = [
+    text(r.kicker, { size: "xs", color: C.sub }),
+    text(`${r.emoji ? r.emoji + " " : ""}${r.title}`, {
+      size: "xl",
+      weight: "bold",
+      color: C.text,
+      margin: "sm",
+    }),
+  ];
+
+  if (r.overall) {
+    contents.push({
+      type: "box",
+      layout: "horizontal",
+      margin: "xl",
+      alignItems: "flex-end",
+      contents: [
+        text(`${r.overall.pct}`, { size: "4xl", weight: "bold", color: pctColor(r.overall.pct), flex: 0 }),
+        text("/ 100", { size: "md", color: C.sub, flex: 0, margin: "sm", gravity: "bottom" }),
+        text(r.overall.label, { size: "sm", color: C.sub, flex: 1, align: "end", gravity: "bottom" }),
+      ],
+    });
+  }
+
+  if (r.scores.length > 0) {
+    contents.push(separator("xl"));
+    r.scores.forEach((s) => contents.push(percentRow(s.label, s.pct)));
+  }
+
+  r.sections
+    .filter((s) => s.text || (s.bullets ?? []).length > 0)
+    .slice(0, 6)
+    .forEach((s) => {
+      contents.push(separator("xl"));
+      if (s.heading) {
+        contents.push(text(s.heading, { size: "sm", weight: "bold", color: C.blue, margin: "lg" }));
+      }
+      if (s.text) {
+        contents.push(text(s.text, { size: "sm", color: C.text, margin: s.heading ? "sm" : "lg" }));
+      }
+      (s.bullets ?? [])
+        .filter(Boolean)
+        .slice(0, 8)
+        .forEach((b, i) => {
+          contents.push(s.numbered ? bulletRow(b, `${i + 1}.`, C.blue) : bulletRow(b));
+        });
+    });
+
+  if (r.footer) {
+    contents.push(separator("xl"));
+    contents.push(text(r.footer, { size: "sm", weight: "bold", color: C.text, margin: "lg" }));
+  }
+
+  return {
+    type: "bubble",
+    size: "mega",
+    body: { type: "box", layout: "vertical", paddingAll: "20px", contents },
+  };
+}
+
+// ---------- Project idea carousel (/discover, /random) ----------
+
+function ideaField(emoji: string, label: string, value: string) {
+  return [
+    text(`${emoji} ${label}`, { size: "xs", color: C.sub, margin: "md" }),
+    text(value, { size: "sm", color: C.text, margin: "xs" }),
+  ];
+}
+
+function ideaBubble(idea: ProjectIdea, index: number) {
+  return {
+    type: "bubble",
+    size: "mega",
+    body: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "20px",
+      contents: [
+        text(`ไอเดียที่ ${index + 1}`, { size: "xs", color: C.faint }),
+        text(idea.name, { size: "lg", weight: "bold", color: C.text, margin: "sm" }),
+        ...(idea.pitch ? [text(idea.pitch, { size: "sm", color: C.sub, margin: "sm" })] : []),
+        separator("lg"),
+        ...ideaField("🎯", "ปัญหาที่แก้", idea.problem),
+        ...ideaField("👥", "กลุ่มผู้ใช้งาน", idea.targetUser),
+        ...ideaField("🛠", "เทคโนโลยี", idea.techStack),
+        ...ideaField("⚙️", "ความยาก", idea.difficulty),
+        separator("lg"),
+        percentRow("ความเป็นไปได้", idea.feasibility),
+        percentRow("ศักยภาพ Startup", idea.startupScore),
+        text(`ถูกใจ? กด "เลือกไอเดีย ${index + 1}" ด้านล่างเลย`, {
+          size: "xs",
+          color: C.faint,
+          margin: "xl",
+          align: "center",
+        }),
+      ],
+    },
+  };
+}
+
+/** Generated project ideas → Flex carousel. */
+export function buildIdeasFlex(ideas: ProjectIdea[]): object {
+  return { type: "carousel", contents: ideas.slice(0, 5).map((idea, i) => ideaBubble(idea, i)) };
 }
 
 const THAI_MONTHS = [

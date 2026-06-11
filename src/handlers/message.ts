@@ -9,16 +9,46 @@ import { handleUpdate } from "./commands/update.js";
 import { handleStatus } from "./commands/status.js";
 import { handleAsk } from "./commands/ask.js";
 import { applyProjectUpdate, EDIT_FIELD_LABELS, handleEdit, handleEditInput } from "./commands/edit.js";
+import { handleDiscover, handleDiscoverInput, handleIdeaChoice, handleRandom } from "./commands/discover.js";
+import { handleMentor, handleMentorInput } from "./commands/mentor.js";
+import {
+  handleCanvas,
+  handleCompete,
+  handlePredict,
+  handleRoadmap,
+  handleStartup,
+  handleTeam,
+  handleValidate,
+} from "./commands/insights.js";
 
-const HELP_TEXT = `คำสั่งที่ใช้ได้:
+const HELP_TEXT = `คำสั่งทั้งหมดของพี่โนวา 🤖
+
+💡 หาไอเดีย
+/discover — ตอบคำถาม 5 ข้อ ให้พี่คิดไอเดียโครงงานให้
+/random — สุ่มผสมเทคโนโลยี ได้ไอเดียใหม่ไม่ซ้ำใคร
+/mentor — โหมดพี่เลี้ยง ถามทีละขั้นจนได้หัวข้อโครงงาน
+
+📁 จัดการโครงงาน
 /new — สร้างโครงงานใหม่
 /switch — สลับโครงงาน
 /edit — แก้ไขข้อมูลโครงงาน
-/analyze — วิเคราะห์นวัตกรรม
 /update [ข้อความ] — บันทึก milestone
 /status — ดูความคืบหน้า
-หรือพิมพ์คำถามอะไรก็ได้เพื่อคุยกับ bot 💬
-ส่งไฟล์ PDF (proposal/รายงาน) มาได้เลย เดี๋ยวอ่านให้ 📄`;
+
+🔍 วิเคราะห์
+/analyze — วิเคราะห์นวัตกรรมเทียบของที่มีอยู่จริง
+/validate — เช็คว่าปัญหามีอยู่จริงไหม + คะแนน 4 ด้าน
+/startup — วิเคราะห์ศักยภาพ Startup (0-100)
+/predict — ทำนายโอกาสสำเร็จของโครงงาน
+
+🧭 วางแผน
+/canvas — สร้างเอกสารโครงงาน (ก็อปไปใช้ต่อได้เลย)
+/roadmap — สร้างแผนดำเนินงานรายสัปดาห์
+/team — แนะนำโครงสร้างทีมที่เหมาะกับโครงงาน
+/compete — จับคู่เวทีแข่งขัน + เคล็ดลับเพิ่มโอกาสชนะ
+
+หรือพิมพ์คุยกับพี่ได้เลย 💬
+ส่งไฟล์ PDF (proposal/รายงาน) มาได้ เดี๋ยวพี่อ่านให้ 📄`;
 
 export async function handleTextMessage(event: MessageEvent): Promise<void> {
   const message = event.message as TextEventMessage;
@@ -39,6 +69,22 @@ export async function handleTextMessage(event: MessageEvent): Promise<void> {
     if (!isCommand) return handleEditInput(replyToken, userId, state, text);
     clearFlow(state);
     await saveSession(userId, state);
+  } else if (state.state === "discovering") {
+    if (!isCommand) return handleDiscoverInput(replyToken, userId, state, text);
+    clearFlow(state);
+    await saveSession(userId, state);
+  } else if (state.state === "mentoring") {
+    if (!isCommand) return handleMentorInput(replyToken, userId, state, text);
+    clearFlow(state);
+    await saveSession(userId, state);
+  } else if (state.state === "choosing_idea") {
+    if (!isCommand && (await handleIdeaChoice(replyToken, userId, state, text))) return;
+    if (isCommand) {
+      clearFlow(state);
+      await saveSession(userId, state);
+    }
+    // not a selection and not a command: fall through to Q&A (ideas stay
+    // selectable so the user can ask about them before picking one)
   } else if (state.state === "awaiting_milestone") {
     clearFlow(state);
     await saveSession(userId, state);
@@ -87,6 +133,16 @@ export async function handleTextMessage(event: MessageEvent): Promise<void> {
     return handleUpdate(replyToken, userId, milestoneText);
   }
   if (text.startsWith("/status")) return handleStatus(replyToken, userId);
+  if (text.startsWith("/discover")) return handleDiscover(replyToken, userId, state);
+  if (text.startsWith("/random")) return handleRandom(replyToken, userId, state);
+  if (text.startsWith("/mentor")) return handleMentor(replyToken, userId, state);
+  if (text.startsWith("/validate")) return handleValidate(replyToken, userId);
+  if (text.startsWith("/startup")) return handleStartup(replyToken, userId);
+  if (text.startsWith("/predict")) return handlePredict(replyToken, userId);
+  if (text.startsWith("/canvas")) return handleCanvas(replyToken, userId);
+  if (text.startsWith("/compete")) return handleCompete(replyToken, userId);
+  if (text.startsWith("/team")) return handleTeam(replyToken, userId);
+  if (text.startsWith("/roadmap")) return handleRoadmap(replyToken, userId);
   if (text.startsWith("/help") || text === "/") return replyText(replyToken, HELP_TEXT);
   if (text.startsWith("/ask"))
     return handleAsk(replyToken, userId, state, text.replace("/ask", "").trim());
@@ -120,8 +176,9 @@ export async function handleFollow(event: FollowEvent): Promise<void> {
 
 พี่เป็น mentor โครงงานนวัตกรรม — ช่วยคิด วิเคราะห์จุดแข็งจุดอ่อนแบบกรรมการจริง (ไม่อวยนะ บอกก่อน 😄) เตือน deadline และอยู่เป็นเพื่อนคุยตลอดทางจนถึงวันส่ง
 
-เริ่มจากเล่าโครงงานให้พี่ฟังหน่อย — กด /new ได้เลย หรือถ้ามีไฟล์ proposal อยู่แล้ว ส่ง PDF มาให้พี่อ่านก่อนก็ได้ 📄`,
-    ["/new", "/help"]
+มีโครงงานแล้ว? กด /new เล่าให้พี่ฟัง (หรือส่งไฟล์ proposal เป็น PDF มาให้พี่อ่านก็ได้ 📄)
+ยังไม่มีไอเดีย? กด /discover เดี๋ยวพี่ช่วยคิดให้เลย 💡`,
+    ["/new", "/discover", "/help"]
   );
 }
 

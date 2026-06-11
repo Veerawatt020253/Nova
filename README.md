@@ -4,14 +4,45 @@ A LINE Bot that helps users manage innovation projects, analyze novelty against 
 
 ## Commands
 
+### 💡 Idea discovery
+
+| Command | Description |
+|---|---|
+| `/discover` | Project Discovery Engine — 5 quick questions (interest, skills, budget, duration, target group) → 3 tailored project ideas with feasibility + startup scores; tap one to create it as a project |
+| `/random` | Innovation Generator — random tech × domain combo (e.g. AI + Healthcare) → fresh ideas, same selection flow |
+| `/mentor` | AI Mentor Mode — Socratic step-by-step questioning (problem → who's affected → current solutions → weaknesses → tech) until a complete project is formed and auto-created |
+
+### 📁 Project management
+
 | Command | Description |
 |---|---|
 | `/new` | Multi-turn wizard to create a project (name → problem → target user → solution → tech stack → competition → deadline) |
 | `/switch` | Pick the active project from a Flex Message button list |
-| `/analyze` | Search existing solutions (Serper ×3, Semantic Scholar, GitHub in parallel) and run a 6-dimension Gemini analysis in Thai |
+| `/edit` | Edit project fields |
 | `/update [text]` | Log a milestone + get a one-line LLM tip |
 | `/status` | Show phase, milestones, deadline countdown, last analysis date |
-| `/help` | List commands |
+
+### 🔍 Analysis
+
+| Command | Description |
+|---|---|
+| `/analyze` | Search existing solutions (Serper ×3, Semantic Scholar, GitHub in parallel) and run a 6-dimension LLM analysis in Thai |
+| `/validate` | Problem Validation — is the problem real? Problem size, affected people, urgency, related research (Semantic Scholar), SDGs + Impact/Innovation/Feasibility/Startup scores |
+| `/startup` | Startup Potential Analyzer — customer, payer, revenue model, market size, competitors, differentiator + 0-100 potential score |
+| `/predict` | Project Success Predictor — Impact/Innovation/Feasibility/Market % + overall success probability with improvement advice |
+
+### 🧭 Planning
+
+| Command | Description |
+|---|---|
+| `/canvas` | Project Canvas Generator — full project document (rationale, objectives, scope, method, expected results, timeline) as copyable text for Word/Docs → PDF |
+| `/roadmap` | Roadmap Generator — week-by-week plan aligned with the submission deadline and logged milestones |
+| `/team` | Team Builder — recommended team roles and responsibilities for this specific project |
+| `/compete` | Competition Matching — best-fit stages (NSC, YSC, Startup Thailand, …) with tips to win |
+
+| Command | Description |
+|---|---|
+| `/help` | List all commands, grouped |
 | anything else | Q&A with active-project context (last 10 messages of history kept per user) |
 
 ## Database setup (PostgreSQL)

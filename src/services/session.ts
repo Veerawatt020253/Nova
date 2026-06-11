@@ -1,5 +1,6 @@
 import { prisma } from "../db/client.js";
 import type { ChatMessage } from "./llm.js";
+import type { DiscoverAnswers, DiscoverStep, ProjectIdea } from "../prompts/features.js";
 
 export interface ProjectDraft {
   name: string;
@@ -21,7 +22,15 @@ export type WizardStep =
   | "deadline";
 
 export interface SessionState {
-  state: "idle" | "creating_project" | "editing_project" | "confirming_update" | "awaiting_milestone";
+  state:
+    | "idle"
+    | "creating_project"
+    | "editing_project"
+    | "confirming_update"
+    | "awaiting_milestone"
+    | "discovering"
+    | "choosing_idea"
+    | "mentoring";
   step?: WizardStep;
   draft?: Partial<ProjectDraft>;
   // /edit wizard
@@ -30,6 +39,10 @@ export interface SessionState {
   // pending project update suggested from chat (awaiting confirmation)
   pendingField?: string;
   pendingValue?: string;
+  // /discover wizard + generated ideas awaiting selection (/discover, /random)
+  discoverStep?: DiscoverStep;
+  discoverAnswers?: Partial<DiscoverAnswers>;
+  ideas?: ProjectIdea[];
   history: ChatMessage[];
 }
 
@@ -60,6 +73,9 @@ export async function loadSession(userId: string): Promise<SessionState> {
       editField: s.editField,
       pendingField: s.pendingField,
       pendingValue: s.pendingValue,
+      discoverStep: s.discoverStep,
+      discoverAnswers: s.discoverAnswers,
+      ideas: s.ideas,
       history: Array.isArray(s.history) ? s.history : [],
     };
   }
@@ -103,6 +119,9 @@ export function clearFlow(state: SessionState): void {
   delete state.editField;
   delete state.pendingField;
   delete state.pendingValue;
+  delete state.discoverStep;
+  delete state.discoverAnswers;
+  delete state.ideas;
 }
 
 export function appendHistory(state: SessionState, role: "user" | "assistant", content: string) {

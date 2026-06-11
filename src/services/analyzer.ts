@@ -10,7 +10,7 @@ import { buildAnalyzePrompt, type AnalysisResult } from "../prompts/analyze.js";
  * Extract short English search keywords from the project so academic/code
  * search works well (those APIs perform poorly with long Thai sentences).
  */
-async function extractKeywords(project: Project): Promise<string> {
+export async function extractKeywords(project: Project): Promise<string> {
   try {
     const text = await generate(
       `Extract 3-5 short English search keywords (space-separated, no punctuation, no explanations) that best describe this innovation project for searching similar products and papers.
